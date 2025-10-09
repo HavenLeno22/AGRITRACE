@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agri-Trace: Blockchain Supply Chain</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f9fafb; /* gray-50 */
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -30px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: #10B981; /* Emerald-500 */
+            border: 4px solid #f3f4f6; /* gray-100 */
+        }
+        .timeline-path {
+            position: absolute;
+            left: -21px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background-color: #d1d5db; /* gray-300 */
+        }
+        .map-container {
+            position: relative;
+            width: 100%;
+            padding-top: 60%; /* Aspect ratio */
+            background-color: #e0f2fe;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            border: 2px solid #93c5fd;
+        }
+        .map-pin {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            width: 24px;
+            height: 24px;
+            background-color: #ef4444;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            border: 2px solid white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        .map-pin:hover {
+            transform: rotate(-45deg) scale(1.2);
+        }
+        .map-pin .pin-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 8px;
+            height: 8px;
+            background-color: white;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div id="app" class="max-w-7xl mx-auto p-4 md:p-8">
+        <!-- App content is rendered here by JavaScript -->
+    </div>
+
+    <script>
+    const App = {
+        // --- STATE & DATA ---
+        state: {
+            currentPage: 'auth',
+            authStep: 'chooser', // 'chooser', 'login', 'signup'
+            userType: null, // 'farmer', 'consumer', 'middleman'
+            isLoggedIn: false,
+            currentUser: null,
+            users: {},
+            products: {},
+            blockchain: {},
+            language: 'en',
+            selectedFarmerProduct: null,
+            iotInterval: null,
+            iotChart: null,
+            financialChart: null,
+        },
+        
+        translations: {
+            en: {
+                menu: 'Menu', home: 'Home', supplyChain: 'Supply Chain', consumerHub: 'Consumer Hub', paymentHistory: 'Payment History', logout: 'Logout', forFarmers: 'For Farmers',
+                welcomeBack: 'Welcome Back', createAccount: 'Create Account', emailOrMobile: 'Email or Mobile Number', password: 'Password', signIn: 'Sign In', dontHaveAccount: "Don't have an account?", signUp: 'Sign Up', fullName: 'Full Name', emailAddress: 'Email Address', mobileNumber: 'Mobile Number', alreadyHaveAccount: 'Already have an account?',
+                farmerPortal: 'Farmer Dashboard', registerNewProduce: 'Register New Produce', productName: 'Product Name', farmerName: "Farmer's Name", farmLocation: 'Farm Location', harvestDate: 'Harvest Date', productDetails: 'Product Details', addProduct: 'Add Product to Blockchain', myProducts: 'My Products',
+                supplyChainPortal: 'Supply Chain Portal', updateProductStatus: 'Update the status of a product', selectProduct: 'Select Product', actionEvent: 'Action / Event', actorName: 'Actor Name', currentLocation: 'Current Location', publicDetails: 'Public Details (Visible to all)', privateDetails: 'Private Financial Details (Visible to Farmer)', addTransaction: 'Add Transaction to Chain',
+            },
+            hi: {
+                menu: 'मेन्यू', home: 'होम', supplyChain: 'आपूर्ति श्रृंखला', consumerHub: 'उपभोक्ता हब', paymentHistory: 'भुगतान इतिहास', logout: 'लॉग आउट', forFarmers: 'किसानों के लिए',
+                welcomeBack: 'वापसी पर स्वागत है', createAccount: 'खाता बनाएं', emailOrMobile: 'ईमेल या मोबाइल नंबर', password: 'पासवर्ड', signIn: 'साइन इन करें', dontHaveAccount: 'खाता नहीं है?', signUp: 'साइन अप करें', fullName: 'पूरा नाम', emailAddress: 'ईमेल पता', mobileNumber: 'मोबाइल नंबर', alreadyHaveAccount: 'पहले से ही एक खाता है?',
+                farmerPortal: 'किसान डैशबोर्ड', registerNewProduce: 'नई उपज दर्ज करें', productName: 'उत्पाद का नाम', farmerName: 'किसान का नाम', farmLocation: 'खेत का स्थान', harvestDate: 'कटाई की तारीख', productDetails: 'उत्पाद विवरण', addProduct: 'ब्लॉकचेन में उत्पाद जोड़ें', myProducts: 'मेरे उत्पाद',
+                supplyChainPortal: 'आपूर्ति श्रृंखला पोर्टल', updateProductStatus: 'उत्पाद की स्थिति अपडेट करें', selectProduct: 'उत्पाद चुनें', actionEvent: 'कार्रवाई / घटना', actorName: 'कर्ता का नाम', currentLocation: 'वर्तमान स्थान', publicDetails: 'सार्वजनिक विवरण (सभी को दिखाई)', privateDetails: 'निजी वित्तीय विवरण (किसान को दिखाई)', addTransaction: 'श्रृंखला में लेनदेन जोड़ें',
+            },
+            ta: {
+                menu: 'பட்டி', home: 'முகப்பு', supplyChain: 'விநியோகச் சங்கிலி', consumerHub: 'நுகர்வோர் மையம்', paymentHistory: 'பணம் செலுத்திய வரலாறு', logout: 'வெளியேறு', forFarmers: 'விவசாயிகளுக்கு',
+                welcomeBack: 'மீண்டும் வருக', createAccount: 'புதிய கணக்கை உருவாக்கு', emailOrMobile: 'மின்னஞ்சల్ அல்லது மொபைல் எண்', password: 'கடவுச்சொல்', signIn: 'உள்நுழை', dontHaveAccount: 'கணக்கு இல்லையா?', signUp: 'பதிவுபெறுக', fullName: 'முழு பெயர்', emailAddress: 'மின்னஞ்சல் முகவரி', mobileNumber: 'மொபைல் எண்', alreadyHaveAccount: 'ஏற்கனவே ஒரு கணக்கு உள்ளதா?',
+                farmerPortal: 'விவசாயி டாஷ்போர்டு', registerNewProduce: 'புதிய விளைபொருளைப் பதிவு செய்யுங்கள்', productName: 'பொருளின் பெயர்', farmerName: 'விவசாயியின் பெயர்', farmLocation: 'பண்ணை இடம்', harvestDate: 'அறுவடை தேதி', productDetails: 'தயாரிப்பு விவரங்கள்', addProduct: 'பிளாக்செயினில் தயாரிப்பைச் சேர்', myProducts: 'என் தயாரிப்புகள்',
+                supplyChainPortal: 'விநியோகச் சங்கிலி போர்டல்', updateProductStatus: 'தயாரிப்பு நிலையை புதுப்பிக்கவும்', selectProduct: 'தயாரிப்பைத் தேர்ந்தெடுக்கவும்', actionEvent: 'действие / நிகழ்வு', actorName: 'செயல்படுபவர் பெயர்', currentLocation: 'தற்போதைய இடம்', publicDetails: 'பொது விவரங்கள் (அனைவருக்கும் தெரியும்)', privateDetails: 'தனிப்பட்ட நிதி விவரங்கள் (விவசாயிக்குத் தெரியும்)', addTransaction: 'சங்கிலியில் பரிவர்த்தனை சேர்க்கவும்',
+            },
+            te: {
+                menu: 'మెను', home: 'హోమ్', supplyChain: 'సరఫరా గొలుసు', consumerHub: 'వినియోగదారు కేంద్రం', paymentHistory: 'చెల్లింపు చరిత్ర', logout: 'లాగ్ అవుట్', forFarmers: 'రైతుల కోసం',
+                welcomeBack: 'తిరిగి స్వాగతం', createAccount: 'ఖాతాను సృష్టించండి', emailOrMobile: 'ఇమెయిల్ లేదా మొబైల్ నంబర్', password: 'పాస్వర్డ్', signIn: 'సైన్ ఇన్ చేయండి', dontHaveAccount: 'ఖాతా లేదా?', signUp: 'నమోదు చేసుకోండి', fullName: 'పూర్తి పేరు', emailAddress: 'ఇమెయిల్ చిరునామా', mobileNumber: 'మొబైల్ నంబర్', alreadyHaveAccount: 'ఇప్పటికే ఖాతా ఉందా?',
+                farmerPortal: 'రైతు డాష్‌బోర్డ్', registerNewProduce: 'కొత్త ఉత్పత్తిని నమోదు చేయండి', productName: 'ఉత్పత్తి పేరు', farmerName: 'రైతు పేరు', farmLocation: 'పొలం స్థానం', harvestDate: 'పంటకోత తేదీ', productDetails: 'ఉత్పత్తి వివరాలు', addProduct: 'బ్లాక్‌చెయిన్‌కు ఉత్పత్తిని జోడించండి', myProducts: 'నా ఉత్పత్తులు',
+                supplyChainPortal: 'సరఫరా గొలుసు పోర్టల్', updateProductStatus: 'ఉత్పత్తి స్థితిని నవీకరించండి', selectProduct: 'ఉత్పత్తిని ఎంచుకోండి', actionEvent: 'చర్య / ఈవెంట్', actorName: 'నటుడి పేరు', currentLocation: 'ప్రస్తుత స్థానం', publicDetails: 'పబ్లిక్ వివరాలు (అందరికీ కనిపిస్తుంది)', privateDetails: 'ప్రైవేట్ ఆర్థిక వివరాలు (రైతుకు కనిపిస్తుంది)', addTransaction: 'గొలుసుకు లావాదేవీని జోడించండి',
+            }
+        },
+
+        // --- INITIALIZATION & CORE ---
+        init() {
+            this.createDummyData();
+            this.state.language = localStorage.getItem('language') || 'en';
+            const urlParams = new URLSearchParams(window.location.search);
+            const productIdFromUrl = urlParams.get('product');
+            if (productIdFromUrl && this.state.products[productIdFromUrl]) {
+                 this.state.pendingAction = { page: 'consumer', param: productIdFromUrl };
+                 this.navigateTo('auth');
+            } else { this.navigateTo('auth'); }
+        },
+        
+        t(key) { return (this.translations[this.state.language] && this.translations[this.state.language][key]) || this.translations['en'][key] || key; },
+
+        renderApp() {
+            if(this.state.iotInterval) clearInterval(this.state.iotInterval);
+            if(this.state.iotChart) this.state.iotChart.destroy();
+            if(this.state.financialChart) this.state.financialChart.destroy();
+
+            const appContainer = document.getElementById('app');
+            let currentPageHtml = '';
+            switch(this.state.currentPage) {
+                case 'auth': currentPageHtml = this.renderAuthPage(); break;
+                case 'home': currentPageHtml = this.renderHomePage(); break;
+                case 'farmer': currentPageHtml = this.renderFarmerPage(); break;
+                case 'middleman': currentPageHtml = this.renderMiddlemanPage(); break;
+                case 'paymentHistory': currentPageHtml = this.renderPaymentHistoryPage(); break;
+                case 'consumer':
+                    currentPageHtml = this.renderConsumerPage(this.state.pendingAction ? this.state.pendingAction.param : null);
+                    if (this.state.pendingAction) this.state.pendingAction = null;
+                    break;
+                default: currentPageHtml = `<p>Page not found</p>`;
+            }
+            appContainer.innerHTML = `${this.renderHeader()}<main id="content" class="min-h-[60vh]">${currentPageHtml}</main>${this.renderFooter()}`;
+            this.postRender();
+        },
+        
+        postRender() {
+            if (this.state.currentPage === 'farmer' && this.state.selectedFarmerProduct) {
+                this.startIotSimulator();
+                this.renderFinancialChart(this.state.selectedFarmerProduct);
+            }
+            const traceResult = document.getElementById('traceResult');
+            if(this.state.currentPage === 'consumer' && traceResult && traceResult.innerHTML !== '') {
+                // The consumer detail is already rendered, now draw the map lines
+                this.drawMapLines(this.lastTracedProductId);
+            }
+        },
+
+        // --- PAGE & COMPONENT RENDERING ---
+        renderHeader() {
+            const baseHeader = `<header class="bg-white rounded-xl shadow-md p-4 md:p-6 mb-8"><nav class="flex justify-between items-center">`; 
+            const headerEnd = `</nav></header>`; 
+            if (!this.state.isLoggedIn) { 
+                return `${baseHeader}<div class="flex-1"></div><div class="flex items-center space-x-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg><h1 class="text-3xl font-bold text-gray-800">Agri<span class="text-emerald-500">Trace</span></h1></div><div class="flex-1 flex justify-end">${this.renderLanguageSwitch()}</div>${headerEnd}`; 
+            }
+            
+            let menuItems = `<a href="#" onclick="app.navigateTo('home'); return false;" class="group flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"><svg class="w-5 h-5 mr-3 text-gray-400 group-hover:text-emerald-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" /></svg><span>${this.t('home')}</span></a>`;
+            if (this.state.currentUser.type === 'farmer') {
+                menuItems += `<a href="#" onclick="app.navigateTo('farmer'); return false;" class="group flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"><svg class="w-5 h-5 mr-3 text-gray-400 group-hover:text-emerald-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 0010 16a5.986 5.986 0 004.546-2.084A5 5 0 0012 11z" clip-rule="evenodd" /></svg><span>${this.t('forFarmers')}</span></a>`;
+                menuItems += `<a href="#" onclick="app.navigateTo('paymentHistory'); return false;" class="group flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"><svg class="w-5 h-5 mr-3 text-gray-400 group-hover:text-emerald-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" /><path fill-rule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clip-rule="evenodd" /></svg><span>${this.t('paymentHistory')}</span></a>`;
+            }
+            if (this.state.currentUser.type === 'middleman') {
+                menuItems += `<a href="#" onclick="app.navigateTo('middleman'); return false;" class="group flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"><svg class="w-5 h-5 mr-3 text-gray-400 group-hover:text-emerald-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10l2 2h8a1 1 0 001-1z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h2a1 1 0 001-1V7a1 1 0 00-1-1h-2" /></svg><span>${this.t('supplyChain')}</span></a>`;
+            }
+            menuItems += `<a href="#" onclick="app.navigateTo('consumer'); return false;" class="group flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"><svg class="w-5 h-5 mr-3 text-gray-400 group-hover:text-emerald-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" /></svg><span>${this.t('consumerHub')}</span></a>`;
+
+
+            return `${baseHeader}<div class="relative"><button onclick="app.toggleMenu()" class="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-100"><svg class="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg><span class="hidden sm:inline font-medium text-gray-700">${this.t('menu')}</span></button>
+            <div id="dropdown-menu" class="hidden absolute left-0 mt-2 w-56 origin-top-left bg-white rounded-md shadow-lg py-1 z-50 ring-1 ring-black ring-opacity-5">
+                ${menuItems}
+                <div class="border-t my-1 border-gray-100"></div>
+                <a href="#" onclick="app.handleLogout(); return false;" class="group flex items-center w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"><svg class="w-5 h-5 mr-3 text-gray-400 group-hover:text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clip-rule="evenodd" /></svg><span>${this.t('logout')}</span></a>
+            </div></div><div class="hidden md:flex flex-1 justify-center items-center space-x-3"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg><h1 class="text-3xl font-bold text-gray-800">Agri<span class="text-emerald-500">Trace</span></h1></div><div class="flex items-center space-x-1 md:space-x-2">${this.renderLanguageSwitch()}</div>${headerEnd}`;
+        },
+        renderLanguageSwitch() {
+            const langNames = {
+                en: 'English',
+                hi: 'हिन्दी',
+                ta: 'தமிழ்',
+                te: 'తెలుగు'
+            };
+
+            return `
+            <div class="relative">
+                <button onclick="app.toggleLangMenu()" class="flex items-center space-x-1 p-2 rounded-lg hover:bg-gray-100 transition-colors focus:outline-none">
+                    <svg class="w-5 h-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 21l5.25-11.25L21 21m-9-3h7.5M3 5.621a48.474 48.474 0 016-.371m0 0c1.12 0 2.233.038 3.334.114M9 5.25V3m3.334 2.364C11.176 10.658 7.69 15.08 3 17.502" />
+                    </svg>
+                    <span class="font-medium text-sm text-gray-700">${this.state.language.toUpperCase()}</span>
+                    <svg class="w-4 h-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+                <div id="lang-dropdown-menu" class="hidden absolute right-0 mt-2 w-40 origin-top-right bg-white rounded-md shadow-lg py-1 z-50 ring-1 ring-black ring-opacity-5">
+                    ${Object.keys(this.translations).map(lang => `
+                        <a href="#" onclick="app.changeLanguage('${lang}'); return false;" class="flex justify-between items-center w-full px-4 py-2 text-sm ${this.state.language === lang ? 'font-semibold text-emerald-600' : 'text-gray-700'} hover:bg-gray-100 transition-colors">
+                            <span>${langNames[lang]}</span>
+                            ${this.state.language === lang ? `<svg class="w-4 h-4 text-emerald-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.052-.143z" clip-rule="evenodd" /></svg>` : ''}
+                        </a>
+                    `).join('')}
+                </div>
+            </div>
+            `;
+        },
+        renderFooter() { return `<footer class="text-center text-sm text-gray-500 mt-12"><p>&copy; 2025 AgriTrace. All rights reserved.</p></footer>`; },
+        renderAuthPage() {
+            switch(this.state.authStep) {
+                case 'chooser':
+                    return `
+                    <div class="max-w-lg mx-auto bg-white p-8 rounded-xl shadow-md text-center">
+                        <h2 class="text-3xl font-bold text-gray-800 mb-2">Welcome to AgriTrace</h2>
+                        <p class="text-gray-600 mb-8">Please select your role to continue.</p>
+                        <div class="space-y-4">
+                            <button onclick="app.handleAuthChoice('farmer')" class="w-full flex items-center text-left p-4 border rounded-lg hover:bg-gray-50 hover:border-emerald-500 transition-all">
+                                <span class="text-3xl mr-4">🧑‍🌾</span>
+                                <div>
+                                    <p class="font-bold text-lg text-gray-800">I am a Farmer</p>
+                                    <p class="text-sm text-gray-500">Register products and track your supply chain.</p>
+                                </div>
+                            </button>
+                             <button onclick="app.handleAuthChoice('middleman')" class="w-full flex items-center text-left p-4 border rounded-lg hover:bg-gray-50 hover:border-emerald-500 transition-all">
+                                <span class="text-3xl mr-4">🚚</span>
+                                <div>
+                                    <p class="font-bold text-lg text-gray-800">I am a Supply Chain Partner</p>
+                                    <p class="text-sm text-gray-500">Update product status and logistics.</p>
+                                </div>
+                            </button>
+                            <button onclick="app.handleAuthChoice('consumer')" class="w-full flex items-center text-left p-4 border rounded-lg hover:bg-gray-50 hover:border-emerald-500 transition-all">
+                                 <span class="text-3xl mr-4">🛒</span>
+                                <div>
+                                    <p class="font-bold text-lg text-gray-800">I am a Consumer</p>
+                                    <p class="text-sm text-gray-500">Trace the journey of your food from farm to fork.</p>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+                    `;
+                case 'login':
+                case 'signup':
+                    const isLogin = this.state.authStep === 'login';
+                    const userTypeDisplay = this.state.userType.charAt(0).toUpperCase() + this.state.userType.slice(1);
+                    return `<div class="max-w-md mx-auto bg-white p-8 rounded-xl shadow-md">
+                        <button onclick="app.resetAuth()" class="mb-4 text-sm text-emerald-600 hover:underline flex items-center">
+                            <svg class="w-4 h-4 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                            Back to role selection
+                        </button>
+                        <h2 class="text-3xl font-bold text-center mb-1 text-gray-800">${isLogin ? 'Welcome Back' : 'Create Account'}</h2>
+                        <p class="text-center text-gray-500 mb-6">${userTypeDisplay} Portal</p>
+                        ${isLogin ? `<form onsubmit="app.handleLogin(event)"><div class="mb-4"><label for="credential" class="block text-sm font-medium">${this.t('emailOrMobile')}</label><input type="text" id="credential" value="${this.state.userType === 'farmer' ? 'farmer@agritrace.io' : (this.state.userType === 'middleman' ? 'middleman@agritrace.io' : 'consumer@agritrace.io')}" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div><div class="mb-6"><label for="password" class="block text-sm font-medium">${this.t('password')}</label><input type="password" id="password" value="password123" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div><button type="submit" class="w-full py-3 bg-emerald-500 text-white font-semibold rounded-lg">${this.t('signIn')}</button></form><p class="text-center text-sm mt-6">${this.t('dontHaveAccount')} <a href="#" onclick="app.toggleAuthForm(); return false;" class="font-medium text-emerald-600">${this.t('signUp')}</a></p>` : `<form onsubmit="app.handleSignup(event)"><div class="mb-4"><label for="newName" class="block text-sm font-medium">${this.t('fullName')}</label><input type="text" id="newName" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div><div class="mb-4"><label for="newEmail" class="block text-sm font-medium">${this.t('emailAddress')}</label><input type="email" id="newEmail" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div><div class="mb-4"><label for="newMobile" class="block text-sm font-medium">${this.t('mobileNumber')}</label><input type="tel" id="newMobile" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div><div class="mb-6"><label for="newPassword" class="block text-sm font-medium">${this.t('password')}</label><input type="password" id="newPassword" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div><button type="submit" class="w-full py-3 bg-emerald-500 text-white font-semibold rounded-lg">${this.t('createAccount')}</button></form><p class="text-center text-sm mt-6">${this.t('alreadyHaveAccount')} <a href="#" onclick="app.toggleAuthForm(); return false;" class="font-medium text-emerald-600">${this.t('signIn')}</a></p>`}
+                    </div>`;
+            }
+        },
+        renderHomePage() { 
+            return `
+            <div class="bg-white rounded-xl shadow-md overflow-hidden">
+                <div class="md:flex">
+                    <div class="md:w-1/2 p-8 md:p-12 flex flex-col justify-center">
+                        <h2 class="text-4xl md:text-5xl font-extrabold text-gray-900 leading-tight">
+                            Transparency from<br>Farm to Fork.
+                        </h2>
+                        <p class="mt-4 text-lg text-gray-600">
+                            AgriTrace uses blockchain to create a secure and transparent supply chain, empowering farmers with fair payments and consumers with knowledge.
+                        </p>
+                        <div class="mt-8 flex flex-wrap gap-4">
+                            <button onclick="app.navigateTo('consumer')" class="px-6 py-3 bg-emerald-500 text-white font-semibold rounded-lg shadow-md hover:bg-emerald-600 transition">Trace a Product</button>
+                            <button onclick="app.navigateTo('farmer')" class="px-6 py-3 bg-gray-200 text-gray-800 font-semibold rounded-lg hover:bg-gray-300 transition">Join as a Farmer</button>
+                        </div>
+                    </div>
+                    <div class="md:w-1/2 relative min-h-[300px] md:min-h-0">
+                        <img class="absolute h-full w-full object-cover" src="https://images.unsplash.com/photo-1560493676-04071c5f467b?q=80&w=1974&auto=format&fit=crop" alt="Fresh vegetables in a field">
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-16">
+                <div class="grid md:grid-cols-3 gap-8">
+                    <div class="bg-white p-8 rounded-xl shadow-md">
+                        <div class="bg-emerald-100 text-emerald-600 rounded-full h-12 w-12 flex items-center justify-center mb-4">
+                             <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h12M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-12a2.25 2.25 0 01-2.25-2.25V3M16.125 6.375a.375.375 0 11-.75 0 .375.375 0 01.75 0zM12.75 6.375a.375.375 0 11-.75 0 .375.375 0 01.75 0zM9.375 6.375a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-800">Empower Farmers</h3>
+                        <p class="mt-2 text-gray-600">Automated smart contracts ensure fair and timely payments.</p>
+                    </div>
+                    <div class="bg-white p-8 rounded-xl shadow-md">
+                        <div class="bg-emerald-100 text-emerald-600 rounded-full h-12 w-12 flex items-center justify-center mb-4">
+                            <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zm-7.518-.267A8.25 8.25 0 1120.25 10.5M8.288 14.212A5.25 5.25 0 1117.25 10.5" /></svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-800">Inform Consumers</h3>
+                        <p class="mt-2 text-gray-600">A simple selection reveals the entire product journey.</p>
+                    </div>
+                    <div class="bg-white p-8 rounded-xl shadow-md">
+                        <div class="bg-emerald-100 text-emerald-600 rounded-full h-12 w-12 flex items-center justify-center mb-4">
+                           <svg class="w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.286zm0 13.036h.008v.008h-.008v-.008z" /></svg>
+                        </div>
+                        <h3 class="text-xl font-bold text-gray-800">Immutable Record</h3>
+                        <p class="mt-2 text-gray-600">Every transaction creates a tamper-proof history.</p>
+                    </div>
+                </div>
+            </div>
+        `;},
+
+        renderFarmerPage() {
+            const farmerProducts = Object.values(this.state.products).filter(p => p.farmerEmail === this.state.currentUser.email);
+            return `
+            <div class="grid lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-1 bg-white p-6 md:p-8 rounded-xl shadow-md">
+                    <h2 class="text-2xl font-bold mb-1 text-gray-800">${this.t('registerNewProduce')}</h2>
+                    <p class="text-gray-500 mb-6">Add a new product to start its journey on the blockchain.</p>
+                    <form onsubmit="app.handleNewProduct(event)">
+                         <div class="space-y-4">
+                            <div><label for="productName" class="block text-sm font-medium text-gray-700">${this.t('productName')}</label><input type="text" id="productName" placeholder="e.g., Organic Alphonso Mangoes" required class="mt-1 block w-full rounded-md border-gray-300 text-gray-800 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></div>
+                            <div><label for="farmerName" class="block text-sm font-medium text-gray-700">${this.t('farmerName')}</label><input type="text" id="farmerName" value="${this.state.currentUser.name}" readonly class="mt-1 block w-full rounded-md border-gray-300 shadow-sm bg-gray-100 text-gray-500"></div>
+                            <div><label for="farmLocation" class="block text-sm font-medium text-gray-700">${this.t('farmLocation')}</label><input type="text" id="farmLocation" placeholder="e.g., Ratnagiri, Maharashtra" required class="mt-1 block w-full rounded-md border-gray-300 text-gray-800 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></div>
+                            <div><label for="harvestDate" class="block text-sm font-medium text-gray-700">${this.t('harvestDate')}</label><input type="date" id="harvestDate" required class="mt-1 block w-full rounded-md border-gray-300 text-gray-800 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></div>
+                            <div><label for="productDetails" class="block text-sm font-medium text-gray-700">${this.t('productDetails')}</label><textarea id="productDetails" rows="3" placeholder="Batch number, quantity, quality notes, etc." required class="mt-1 block w-full rounded-md border-gray-300 text-gray-800 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></textarea></div>
+                        </div>
+                        <div class="mt-6"><button type="submit" class="w-full px-6 py-3 bg-emerald-500 text-white font-semibold rounded-lg shadow-md hover:bg-emerald-600 transition">${this.t('addProduct')}</button></div>
+                    </form>
+                </div>
+                <div class="lg:col-span-2 bg-white p-6 md:p-8 rounded-xl shadow-md">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">${this.t('myProducts')}</h2>
+                    <div id="farmer-product-view">
+                        ${this.state.selectedFarmerProduct ? this.renderFarmerProductDetail(this.state.selectedFarmerProduct) : `<div class="grid md:grid-cols-2 gap-4">${farmerProducts.length > 0 ? farmerProducts.map(p => `<div class="p-4 border rounded-lg hover:shadow-lg hover:border-emerald-500 cursor-pointer transition-all duration-200" onclick="app.selectFarmerProduct('${p.id}')"><p class="font-bold text-lg text-gray-800">${p.name}</p><p class="text-sm text-gray-500">ID: ${p.id.substring(0,12)}...</p><p class="text-sm text-gray-500">Harvested: ${new Date(p.harvestDate).toLocaleDateString()}</p></div>`).join('') : '<p class="text-gray-500 md:col-span-2">You have not registered any products yet.</p>'}</div>`}
+                    </div>
+                </div>
+            </div>`;
+        },
+
+        renderFarmerProductDetail(productId) {
+            const product = this.state.products[productId];
+            return `
+                <div>
+                    <div class="flex justify-between items-start mb-6">
+                        <div><h3 class="text-3xl font-bold text-gray-800">${product.name}</h3><p class="text-gray-500">ID: ${product.id}</p></div>
+                        <button onclick="app.deselectFarmerProduct()" class="text-sm text-emerald-600 hover:underline">&larr; Back to all products</button>
+                    </div>
+                    <div class="space-y-8">
+                        <div class="grid md:grid-cols-2 gap-6">
+                            <div class="bg-gray-100 p-6 rounded-lg"><h4 class="text-xl font-bold text-gray-700 mb-4">Live IoT Monitoring</h4><div class="grid grid-cols-2 gap-4 text-center mb-4"><div class="bg-blue-100 text-blue-800 p-4 rounded-lg"><p class="text-sm font-medium">Temperature</p><p class="text-3xl font-bold" id="iot-temp">--</p></div><div class="bg-green-100 text-green-800 p-4 rounded-lg"><p class="text-sm font-medium">Humidity</p><p class="text-3xl font-bold" id="iot-humidity">--</p></div></div><div><canvas id="iotChartCanvas"></canvas></div></div>
+                            <div class="bg-gray-100 p-6 rounded-lg"><h4 class="text-xl font-bold text-gray-700 mb-4">Financial Breakdown</h4><p class="text-sm text-gray-500 mb-4">Visualizing the cost distribution from farm to final sale.</p><div class="max-w-xs mx-auto"><canvas id="financialChartCanvas"></canvas></div></div>
+                        </div>
+                        <div><h4 class="text-xl font-bold text-gray-700 mb-4">Full Product Journey</h4>${this.renderProductJourney(productId)}</div>
+                    </div>
+                </div>`;
+        },
+
+        renderMiddlemanPage() { let p = Object.values(this.state.products).map(p => `<option value="${p.id}">${p.name}...</option>`).join(''); return `<div class="bg-white p-8 rounded-xl shadow-md"><h2 class="text-2xl font-bold text-gray-800">${this.t('supplyChainPortal')}</h2><p class="mb-6 text-gray-500">${this.t('updateProductStatus')}</p><form onsubmit="app.handleUpdateProduct(event)"><div class="grid md:grid-cols-2 gap-6"><div><label for="productIdUpdate" class="block text-sm font-medium text-gray-700">${this.t('selectProduct')}</label><select id="productIdUpdate" required class="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"><option value="" disabled selected>-- Choose a product --</option>${p}</select></div><div><label for="action" class="block text-sm font-medium text-gray-700">${this.t('actionEvent')}</label><select id="action" required class="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"><option>Growth Monitoring</option><option>Transported</option><option>Processed</option><option>Stored</option><option>Quality Checked</option><option>Sold to Retailer</option><option>Delivered</option></select></div><div><label for="actorName" class="block text-sm font-medium text-gray-700">${this.t('actorName')}</label><input type="text" id="actorName" required class="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></div><div><label for="location" class="block text-sm font-medium text-gray-700">${this.t('currentLocation')}</label><input type="text" id="location" required class="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></div><div><label for="publicDetails" class="block text-sm font-medium text-gray-700">${this.t('publicDetails')}</label><input type="text" id="publicDetails" required class="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></div><div><label for="privateDetails" class="block text-sm font-medium text-gray-700">${this.t('privateDetails')}</label><input type="text" id="privateDetails" class="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"></div></div><button type="submit" class="mt-6 w-full md:w-auto px-6 py-3 bg-emerald-500 text-white font-semibold rounded-lg shadow-md hover:bg-emerald-600 transition">${this.t('addTransaction')}</button></form></div>`;},
+        
+        renderPaymentHistoryPage() {
+            const farmerProducts = Object.values(this.state.products).filter(p => p.farmerEmail === this.state.currentUser.email);
+            let payments = [];
+
+            farmerProducts.forEach(product => {
+                const chain = this.state.blockchain[product.id];
+                if (!chain) return;
+
+                const saleBlock = chain.find(b => b.data.action === 'Sold to Retailer');
+                if (saleBlock) {
+                    const priceMatch = saleBlock.data.details.privateNotes.match(/Price:\s*(\d+(\.\d+)?)/);
+                    const commissionMatch = saleBlock.data.details.privateNotes.match(/Commission:\s*(\d+(\.\d+)?)/);
+                    const finalPrice = priceMatch ? parseFloat(priceMatch[1]) : 0;
+                    const commission = commissionMatch ? parseFloat(commissionMatch[1]) : 0;
+                    let logisticsCost = 0;
+                    chain.forEach(block => {
+                        if (block.data.action === 'Transported' && block.data.details.privateNotes) {
+                            const costMatch = block.data.details.privateNotes.match(/cost:\s*₹(\d+(\.\d+)?)/i);
+                            if (costMatch) logisticsCost += parseFloat(costMatch[1]);
+                        }
+                    });
+                    const farmerShare = finalPrice - commission - logisticsCost;
+
+                    if (farmerShare > 0) {
+                        payments.push({
+                            productName: product.name,
+                            date: new Date(saleBlock.timestamp),
+                            amount: farmerShare,
+                            productId: product.id,
+                            transactionHash: saleBlock.hash
+                        });
+                    }
+                }
+            });
+            
+            payments.sort((a, b) => b.date - a.date);
+
+            let contentHtml = payments.length === 0 ? `<p class="text-center text-gray-500 mt-8">No payment records found.</p>` : `
+                <div class="overflow-x-auto"><table class="min-w-full bg-white border border-gray-200">
+                    <thead class="bg-gray-50"><tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Amount Received</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction ID</th>
+                    </tr></thead>
+                    <tbody class="divide-y divide-gray-200">${payments.map(p => `
+                        <tr>
+                            <td class="px-6 py-4 whitespace-nowrap"><div class="text-sm font-medium text-gray-900">${p.productName}</div><div class="text-sm text-gray-500">${p.productId.substring(0,12)}...</div></td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${p.date.toLocaleDateString()}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-emerald-600">${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(p.amount)}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">${p.transactionHash.substring(0, 16)}...</td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table></div>`;
+
+            return `<div class="bg-white p-8 rounded-xl shadow-md">
+                <h2 class="text-3xl font-bold mb-1 text-gray-800">Payment History</h2>
+                <p class="text-gray-500 mb-6">A record of all payments received from product sales via smart contracts.</p>
+                ${contentHtml}
+            </div>`;
+        },
+        
+        renderConsumerPage(pId=null){
+            this.lastTracedProductId = pId;
+            let p=Object.values(this.state.products).map(p=>`<option value="${p.id}" ${p.id===pId?'selected':''}>${p.name}...</option>`).join('');
+            return`<div class="bg-white p-8 rounded-xl shadow-md">
+                <h2 class="text-2xl font-bold text-gray-800">Consumer Hub</h2>
+                <p class="mb-6 text-gray-500">Select a product to view its verifiable journey from the farm.</p>
+                <form onsubmit="event.preventDefault();app.handleTraceProduct(event.target.elements.productIdTrace.value)">
+                    <select id="productIdTrace" onchange="app.handleTraceProduct(this.value)" required class="w-full text-lg p-4 rounded-md border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500">
+                        <option value="" disabled ${!pId?'selected':''}>-- Select a product to trace --</option>
+                        ${p}
+                    </select>
+                </form>
+                <div id="traceResult">${pId?this.renderConsumerProductDetail(pId):''}</div>
+            </div>`
+        },
+        renderConsumerProductDetail(pId){
+            const p=this.state.products[pId];
+            const v=this.isChainValid(pId);
+            return`
+            <div class="mt-8">
+                <div>
+                    <h3 class="text-3xl font-bold text-gray-800">${p.name}</h3>
+                    <p class="text-gray-500">ID: ${p.id}</p>
+                </div>
+                <div class="mt-6 grid md:grid-cols-2 gap-8">
+                    <div>
+                        <h4 class="text-xl font-bold mb-4 text-gray-700">Journey Map</h4>
+                        ${this.renderJourneyMap(pId)}
+                    </div>
+                    <div class="bg-gray-100 p-6 rounded-lg">
+                        <h4 class="text-xl font-bold text-gray-700">Quality & Authenticity</h4>
+                        <div class="flex flex-col gap-4 mt-4">
+                           <div class="flex items-center space-x-2 text-green-700 font-medium"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm-2.22 7.082a.75.75 0 001.06 0l2.22-2.22a.75.75 0 00-1.06-1.06L6 10.94l-1.72-1.72a.75.75 0 00-1.06 1.06l2.22 2.22z" clip-rule="evenodd" /></svg><span>Organic Certified</span></div>
+                           <div class="flex items-center space-x-2 text-green-700 font-medium"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg><span>Fair Trade</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6 border-t pt-6">
+                    <h4 class="text-xl font-bold mb-4 text-gray-700">Detailed Journey Timeline</h4>
+                    ${this.renderProductJourney(pId)}
+                </div>
+            </div>`
+        },
+
+        renderJourneyMap(productId) {
+            const chain = this.state.blockchain[productId];
+            const locations = chain
+                .map(block => block.data.details ? block.data.details.coords : null)
+                .filter(coords => coords);
+
+            const pins = locations.map(coords => 
+                `<div class="map-pin" style="left: ${coords.x}%; top: ${coords.y}%;"><div class="pin-center"></div></div>`
+            ).join('');
+
+            return `<div class="map-container" id="map-container-${productId}">${pins}<svg class="absolute top-0 left-0 w-full h-full" style="pointer-events:none;"></svg></div>`;
+        },
+
+        drawMapLines(productId) {
+            const container = document.getElementById(`map-container-${productId}`);
+            if (!container) return;
+            const svg = container.querySelector('svg');
+            const chain = this.state.blockchain[productId];
+            const locations = chain
+                .map(block => block.data.details ? block.data.details.coords : null)
+                .filter(coords => coords);
+            
+            for (let i = 0; i < locations.length - 1; i++) {
+                const p1 = locations[i];
+                const p2 = locations[i+1];
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', `${p1.x}%`);
+                line.setAttribute('y1', `${p1.y}%`);
+                line.setAttribute('x2', `${p2.x}%`);
+                line.setAttribute('y2', `${p2.y}%`);
+                line.setAttribute('stroke', '#3b82f6');
+                line.setAttribute('stroke-width', '2');
+                line.setAttribute('stroke-dasharray', '5, 5');
+                svg.appendChild(line);
+            }
+        },
+
+        renderProductJourney(pId){const p=this.state.products[pId],c=this.state.blockchain[pId],f=this.state.isLoggedIn&&this.state.currentUser.email===p.farmerEmail;let t=c.map(b=>{let d=b.data,ct;if(typeof d==='string')ct=`<p>${d}</p>`;else{let pt=f&&d.details.privateNotes?`<p class="mt-2 text-xs text-gray-500 bg-gray-200 p-2 rounded"><strong>Private Details:</strong> ${d.details.privateNotes}</p>`:'';ct=`<p class="font-bold text-lg text-emerald-600">${d.action}</p><p class="text-sm text-gray-500">by <span class="font-medium">${d.details.actor}</span></p><p>Location: ${d.details.location}</p><p>Details: ${d.details.publicNotes||'N/A'}</p>${pt}`}return`<div class="relative pl-8 pb-8"><div class="timeline-item"></div><div class="timeline-path"></div><div class="bg-gray-100 p-4 rounded-lg">${ct}<p class="text-xs text-gray-400 mt-2">${new Date(b.timestamp).toLocaleString()}</p></div></div>`}).join('');return`<div class="relative">${t}</div>`},
+        
+        // --- EVENT HANDLERS & ACTIONS ---
+        navigateTo(page, param = null) {
+            if (this.state.isLoggedIn) {
+                const accessControl = {
+                    farmer: ['home', 'farmer', 'consumer', 'paymentHistory'],
+                    consumer: ['home', 'consumer'],
+                    middleman: ['home', 'middleman', 'consumer']
+                };
+                const allowedPages = accessControl[this.state.currentUser.type] || [];
+                if (!allowedPages.includes(page)) {
+                    this.showToast("Access Denied.", true);
+                    this.navigateTo(allowedPages[0] || 'home');
+                    return;
+                }
+            }
+
+            this.state.currentPage = (page !== 'auth' && !this.state.isLoggedIn) ? 'auth' : page;
+
+            if(param) {
+                if(!this.state.pendingAction) this.state.pendingAction = {};
+                this.state.pendingAction.param = param;
+            }
+            this.state.selectedFarmerProduct = null;
+            this.renderApp();
+            if (this.state.currentPage === 'consumer' && param) {
+                const select = document.getElementById('productIdTrace');
+                if(select) select.value = param;
+            }
+        },
+        selectFarmerProduct(productId) { this.state.selectedFarmerProduct = productId; this.renderApp(); },
+        deselectFarmerProduct() { this.state.selectedFarmerProduct = null; this.renderApp(); },
+        toggleMenu() { document.getElementById('dropdown-menu').classList.toggle('hidden'); },
+        toggleLangMenu() {
+            document.getElementById('lang-dropdown-menu').classList.toggle('hidden');
+        },
+        toggleAuthForm() { 
+            this.state.authStep = this.state.authStep === 'login' ? 'signup' : 'login';
+            this.renderApp();
+        },
+        handleAuthChoice(type) {
+            this.state.userType = type;
+            this.state.authStep = 'login';
+            this.renderApp();
+        },
+        resetAuth() {
+            this.state.userType = null;
+            this.state.authStep = 'chooser';
+            this.renderApp();
+        },
+        changeLanguage(lang) {
+            this.state.language = lang;
+            localStorage.setItem('language', lang);
+            const menu = document.getElementById('lang-dropdown-menu');
+            if (menu && !menu.classList.contains('hidden')) {
+                menu.classList.add('hidden');
+            }
+            this.renderApp();
+        },
+        handleLogin(event) {
+            event.preventDefault();
+            const c = document.getElementById('credential').value;
+            const p = document.getElementById('password').value;
+            let user = c.includes('@') ? this.state.users[c] : Object.values(this.state.users).find(u => u.mobile === c);
+            
+            if(user && user.password === p && user.type === this.state.userType) {
+                this.state.isLoggedIn = true;
+                this.state.currentUser = user;
+                this.showToast(`Welcome back, ${user.name}!`);
+                
+                let defaultPage = 'home';
+                if(user.type === 'farmer') defaultPage = 'farmer';
+                if(user.type === 'consumer') defaultPage = 'consumer';
+                if(user.type === 'middleman') defaultPage = 'middleman';
+
+                this.navigateTo(this.state.pendingAction ? this.state.pendingAction.page : defaultPage, this.state.pendingAction ? this.state.pendingAction.param : null);
+            } else {
+                this.showToast("Invalid credentials for this role.", true);
+            }
+        },
+        handleSignup(event) { event.preventDefault(); const n = document.getElementById('newName').value, e = document.getElementById('newEmail').value, m = document.getElementById('newMobile').value, p = document.getElementById('newPassword').value; if(this.state.users[e]) return this.showToast("Email already exists.", true); if(Object.values(this.state.users).find(u=>u.mobile===m)) return this.showToast("Mobile already exists.", true); const newUser = {name:n,email:e,mobile:m,password:p, type: this.state.userType}; this.state.users[e] = newUser; this.state.isLoggedIn = true; this.state.currentUser = newUser; this.showToast("Account created!"); this.navigateTo('home'); },
+        handleLogout() { 
+            this.state.isLoggedIn = false; 
+            this.state.currentUser = null; 
+            this.state.authStep = 'chooser';
+            this.state.userType = null;
+            this.showToast("Logged out."); 
+            this.navigateTo('auth'); 
+        },
+        handleNewProduct(event) { event.preventDefault(); const form = event.target.elements; const productId = 'prod_' + Date.now(); this.state.products[productId] = {id:productId, name: form.productName.value, farmerName: form.farmerName.value, farmerEmail: this.state.currentUser.email, farmLocation: form.farmLocation.value, harvestDate: form.harvestDate.value }; this.createGenesisBlock(productId); this.addBlock(productId, {action: 'Product Harvested', details: {actor:form.farmerName.value, location:form.farmLocation.value, publicNotes:`Harvested on ${new Date(form.harvestDate.value).toLocaleDateString()}`, privateNotes:`Details: ${form.productDetails.value}`}}); this.showToast("Product registered!"); this.deselectFarmerProduct(); },
+        handleUpdateProduct(event) { event.preventDefault(); const form=event.target.elements; const data = {action:form.action.value, details: {actor:form.actorName.value, location:form.location.value, publicNotes:form.publicDetails.value, privateNotes:form.privateDetails.value, price:(form.privateDetails.value.match(/Price:\s*(\d+)/)||[])[1]||0 }}; this.addBlock(form.productIdUpdate.value, data); this.showToast("Transaction added."); event.target.reset(); },
+        handleTraceProduct(productId) { if (productId) { this.navigateTo('consumer', productId); } },
+
+        // --- CHART & SIMULATOR RENDERING ---
+        startIotSimulator() {
+            const ctx = document.getElementById('iotChartCanvas')?.getContext('2d');
+            if(!ctx) return;
+            const initialData = { labels: [new Date().toLocaleTimeString()], datasets: [ { label: 'Temperature (°C)', data: [24], borderColor: 'rgba(52, 211, 153, 1)', backgroundColor: 'rgba(52, 211, 153, 0.2)', fill: true, tension: 0.4 }, { label: 'Humidity (%)', data: [65], borderColor: 'rgba(59, 130, 246, 1)', backgroundColor: 'rgba(59, 130, 246, 0.2)', fill: true, tension: 0.4 } ] };
+            this.state.iotChart = new Chart(ctx, { type: 'line', data: initialData, options: { responsive: true } });
+            this.state.iotInterval = setInterval(() => {
+                const tempEl = document.getElementById('iot-temp'); const humidityEl = document.getElementById('iot-humidity');
+                if (!tempEl || !humidityEl || !this.state.iotChart) { clearInterval(this.state.iotInterval); return; }
+                let lastTemp = this.state.iotChart.data.datasets[0].data.slice(-1)[0]; let newTemp = Math.max(22, Math.min(26, lastTemp + (Math.random() - 0.5) * 0.2));
+                let lastHumidity = this.state.iotChart.data.datasets[1].data.slice(-1)[0]; let newHumidity = Math.max(60, Math.min(70, lastHumidity + (Math.random() - 0.5) * 0.5));
+                tempEl.textContent = `${newTemp.toFixed(1)}°C`; humidityEl.textContent = `${newHumidity.toFixed(1)}%`;
+                const newLabel = new Date().toLocaleTimeString(); this.state.iotChart.data.labels.push(newLabel);
+                this.state.iotChart.data.datasets[0].data.push(newTemp); this.state.iotChart.data.datasets[1].data.push(newHumidity);
+                if (this.state.iotChart.data.labels.length > 10) { this.state.iotChart.data.labels.shift(); this.state.iotChart.data.datasets.forEach(dataset => dataset.data.shift()); }
+                this.state.iotChart.update();
+            }, 3000);
+        },
+        renderFinancialChart(productId) {
+            const chain = this.state.blockchain[productId]; const saleBlock = chain.find(b => b.data.action === 'Sold to Retailer');
+            const ctx = document.getElementById('financialChartCanvas')?.getContext('2d');
+            if (!saleBlock || !ctx) return;
+            const priceMatch = saleBlock.data.details.privateNotes.match(/Price:\s*(\d+(\.\d+)?)/); const commissionMatch = saleBlock.data.details.privateNotes.match(/Commission:\s*(\d+(\.\d+)?)/);
+            const finalPrice = priceMatch ? parseFloat(priceMatch[1]) : 0; const commission = commissionMatch ? parseFloat(commissionMatch[1]) : 0;
+            let logisticsCost = 0;
+            chain.forEach(block => { if (block.data.action === 'Transported' && block.data.details.privateNotes) { const costMatch = block.data.details.privateNotes.match(/cost:\s*₹(\d+(\.\d+)?)/i); if (costMatch) logisticsCost += parseFloat(costMatch[1]); } });
+            const retailerMargin = finalPrice * 0.25; const farmerShare = finalPrice - commission - logisticsCost;
+            if (farmerShare < 0) return;
+            this.state.financialChart = new Chart(ctx, {
+                type: 'doughnut', data: { labels: ["Farmer's Share", 'Logistics', 'Commission', 'Retailer Margin'], datasets: [{ data: [farmerShare, logisticsCost, commission, retailerMargin], backgroundColor: ['#10B981', '#3B82F6', '#F59E0B', '#8B5CF6'], hoverOffset: 4 }] },
+                options: { responsive: true, plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: function(context) { let label = context.label || ''; if (context.parsed !== null) { label += ': ' + new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(context.parsed); } return label; } } } } }
+            });
+        },
+
+        // --- BLOCKCHAIN LOGIC & DUMMY DATA ---
+        createGenesisBlock(productId) { this.state.blockchain[productId] = [{ index:0, timestamp:Date.now(), data:'Genesis Block', previousHash:"0", hash:this.calculateHash(0, Date.now(), 'Genesis Block', "0") }]; },
+        addBlock(productId, data) {
+            const prev = this.getLatestBlock(productId);
+            const newIndex = prev.index + 1;
+            const newTs = Date.now();
+            const newHash = this.calculateHash(newIndex, newTs, JSON.stringify(data), prev.hash);
+            const newBlock = { index: newIndex, timestamp: newTs, data: data, previousHash: prev.hash, hash: newHash };
+            this.state.blockchain[productId].push(newBlock);
+
+            if (data.action === "Sold to Retailer" && data.details.price) {
+                this.showSmartContractToast({
+                    amount: data.details.price,
+                    recipient: this.state.products[productId].farmerName,
+                    hash: newBlock.hash
+                });
+            }
+        },
+        getLatestBlock(productId) { return this.state.blockchain[productId].slice(-1)[0]; },
+        calculateHash(i,t,d,p) { return CryptoJS.SHA256(i+p+t+JSON.stringify(d)).toString(); },
+        isChainValid(productId) { const chain=this.state.blockchain[productId]; for(let i=1;i<chain.length;i++){const cur=chain[i],prev=chain[i-1];if(cur.hash!==this.calculateHash(cur.index,cur.timestamp,JSON.stringify(cur.data),cur.previousHash))return false;if(cur.previousHash!==prev.hash)return false;} return true; },
+        showToast(message, isError=false) { const el = document.createElement('div'); el.className=`fixed top-5 right-5 ${isError ? 'bg-red-500':'bg-emerald-500'} text-white py-3 px-6 rounded-lg shadow-lg z-50 animate-fade`; el.textContent=message; document.body.appendChild(el); const style = document.createElement('style'); style.innerHTML=`@keyframes f{0%,100%{opacity:0;transform:translateY(-20px)}10%,90%{opacity:1;transform:translateY(0)}}.animate-fade{animation:f 4s ease forwards}`; document.head.appendChild(style); setTimeout(()=>{el.remove();style.remove()}, 4000); },
+        showSmartContractToast(details) {
+            const toast = document.createElement('div');
+            toast.className = `fixed top-5 right-5 bg-white text-gray-800 p-4 rounded-lg shadow-2xl z-50 border-l-4 border-emerald-500 animate-fade w-full max-w-sm`;
+            toast.innerHTML = `
+                <div class="flex items-start space-x-3">
+                    <div>
+                        <svg class="w-6 h-6 text-emerald-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="font-bold text-md">Smart Contract Executed</p>
+                        <p class="text-sm text-gray-600 mt-1">Payment of <span class="font-semibold text-emerald-600">${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(details.amount)}</span> has been automatically transferred to ${details.recipient}.</p>
+                        <p class="text-xs text-gray-400 mt-2 font-mono">Tx: ${details.hash.substring(0, 24)}...</p>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(toast);
+            const style = document.createElement('style');
+            style.innerHTML=`@keyframes f{0%,100%{opacity:0;transform:translateY(-20px)}10%,90%{opacity:1;transform:translateY(0)}}.animate-fade{animation:f 6s ease forwards}`;
+            document.head.appendChild(style);
+            setTimeout(()=>{toast.remove();style.remove()}, 6000);
+        },
+        createDummyData() {
+            this.state.users['farmer@agritrace.io'] = { name: 'Maria Rodriguez', email: 'farmer@agritrace.io', password: 'password123', mobile: '1234567890', type: 'farmer' };
+            this.state.users['consumer@agritrace.io'] = { name: 'Anil Kumar', email: 'consumer@agritrace.io', password: 'password123', mobile: '0987654321', type: 'consumer' };
+            this.state.users['middleman@agritrace.io'] = { name: 'Fresh Haul Inc.', email: 'middleman@agritrace.io', password: 'password123', mobile: '1122334455', type: 'middleman' };
+            const dummyProductId = 'prod_1672531200000_dummydata';
+            this.state.products[dummyProductId] = { id: dummyProductId, name: 'Organic Avocados', farmerName: 'Maria Rodriguez', farmerEmail: 'farmer@agritrace.io', farmLocation: 'Sunny Slope Farms, CA', harvestDate: '2025-10-01' };
+            this.createGenesisBlock(dummyProductId);
+            this.addBlock(dummyProductId, { action: 'Growth Monitoring', details: { actor: 'Farm IoT System', location: 'Sunny Slope Farms, CA', publicNotes: 'Consistent soil moisture and optimal temperature maintained.', privateNotes: 'Automated irrigation activated twice.', coords: {x: 20, y: 30} }});
+            this.addBlock(dummyProductId, { action: 'Product Harvested', details: { actor: 'Maria Rodriguez', location: 'Sunny Slope Farms, CA', publicNotes: 'Harvested from our sunniest orchard.', privateNotes: 'Yield was 15% above estimate.', coords: {x: 20, y: 30} }});
+            this.addBlock(dummyProductId, { action: 'Transported', details: { actor: 'Fresh Haul Inc.', location: 'En route to LA', publicNotes: 'In transit to distribution center.', privateNotes: 'Transportation cost: ₹12000, Temp: 7°C', coords: {x: 45, y: 55} }});
+            this.addBlock(dummyProductId, { action: 'Stored in Warehouse', details: { actor: 'West Coast Distribution', location: 'Los Angeles, CA', publicNotes: 'Awaiting distribution.', privateNotes: 'Stored in cold storage unit 5.', coords: {x: 60, y: 70} }});
+            this.addBlock(dummyProductId, { action: 'Sold to Retailer', details: { actor: 'West Coast Distribution', location: 'Los Angeles, CA', publicNotes: 'Sold to a trusted retail partner.', privateNotes: 'Price: 64000, Commission: 6400', price: 64000, coords: {x: 60, y: 70} }});
+            this.addBlock(dummyProductId, { action: 'Delivered to Store', details: { actor: 'Green Grocer Delivery', location: 'Green Grocer, Santa Monica', publicNotes: 'Now available at your local store!', privateNotes: 'Final delivery confirmed.', coords: {x: 80, y: 85} }});
+        }
+    };
+    
+    // Global variable
+    const app = Object.create(App);
+    document.addEventListener('DOMContentLoaded', () => {
+        app.init();
+    });
+    </script>
+</body>
+</html>
+
