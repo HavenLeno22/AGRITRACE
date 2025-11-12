@@ -3,10 +3,16 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
+app.get('/', (req, res) => {
+  res.send('Backend connected successfully 🚀');
+});
+
+
 
 let users = {
     'farmer@agritrace.io': { name: 'Maria Rodriguez', password: 'password123', type: 'farmer' },
@@ -44,7 +50,17 @@ app.post('/api/chat', async (req, res) => {
         res.status(500).json({ error: "Failed to communicate with the AI assistant." });
     }
 });
+app.get('/', (req, res) => {
+  res.send('Backend is alive! 🚀');
+});
+
+app.get('/test', (req, res) => {
+  res.json({ message: 'Hello from backend!' });
+});
+
 
 app.listen(PORT, () => {
     console.log(`Backend server is running on http://localhost:${PORT}`);
 });
+
+
