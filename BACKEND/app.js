@@ -22,7 +22,7 @@ export default App;
 
 
 useEffect(() => {
-  fetch('http://localhost:5000/test')  // your backend route
+  fetch('http://localhost:5000/test')  
     .then(res => res.json())
     .then(data => setData(data))
     .catch(err => console.error(err));
