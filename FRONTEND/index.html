@@ -510,8 +510,7 @@
         },
 
         renderProductJourney(pId){const p=this.state.products[pId],c=this.state.blockchain[pId],f=this.state.isLoggedIn&&this.state.currentUser.email===p.farmerEmail;let t=c.map(b=>{let d=b.data,ct;if(typeof d==='string')ct=`<p>${d}</p>`;else{let pt=f&&d.details.privateNotes?`<p class="mt-2 text-xs text-gray-500 bg-gray-200 p-2 rounded"><strong>Private Details:</strong> ${d.details.privateNotes}</p>`:'';ct=`<p class="font-bold text-lg text-emerald-600">${d.action}</p><p class="text-sm text-gray-500">by <span class="font-medium">${d.details.actor}</span></p><p>Location: ${d.details.location}</p><p>Details: ${d.details.publicNotes||'N/A'}</p>${pt}`}return`<div class="relative pl-8 pb-8"><div class="timeline-item"></div><div class="timeline-path"></div><div class="bg-gray-100 p-4 rounded-lg">${ct}<p class="text-xs text-gray-400 mt-2">${new Date(b.timestamp).toLocaleString()}</p></div></div>`}).join('');return`<div class="relative">${t}</div>`},
-        
-        // --- EVENT HANDLERS & ACTIONS ---
+       
         navigateTo(page, param = null) {
             if (this.state.isLoggedIn) {
                 const accessControl = {
