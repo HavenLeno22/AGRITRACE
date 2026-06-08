@@ -163,7 +163,6 @@
             }
             const traceResult = document.getElementById('traceResult');
             if(this.state.currentPage === 'consumer' && traceResult && traceResult.innerHTML !== '') {
-                // The consumer detail is already rendered, now draw the map lines
                 this.drawMapLines(this.lastTracedProductId);
             }
         },
