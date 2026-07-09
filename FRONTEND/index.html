@@ -636,7 +636,7 @@
             });
         },
 
-        // --- BLOCKCHAIN LOGIC & DUMMY DATA ---
+     
         createGenesisBlock(productId) { this.state.blockchain[productId] = [{ index:0, timestamp:Date.now(), data:'Genesis Block', previousHash:"0", hash:this.calculateHash(0, Date.now(), 'Genesis Block', "0") }]; },
         addBlock(productId, data) {
             const prev = this.getLatestBlock(productId);
