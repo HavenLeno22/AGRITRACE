@@ -602,7 +602,7 @@
         handleUpdateProduct(event) { event.preventDefault(); const form=event.target.elements; const data = {action:form.action.value, details: {actor:form.actorName.value, location:form.location.value, publicNotes:form.publicDetails.value, privateNotes:form.privateDetails.value, price:(form.privateDetails.value.match(/Price:\s*(\d+)/)||[])[1]||0 }}; this.addBlock(form.productIdUpdate.value, data); this.showToast("Transaction added."); event.target.reset(); },
         handleTraceProduct(productId) { if (productId) { this.navigateTo('consumer', productId); } },
 
-        // --- CHART & SIMULATOR RENDERING ---
+        
         startIotSimulator() {
             const ctx = document.getElementById('iotChartCanvas')?.getContext('2d');
             if(!ctx) return;
